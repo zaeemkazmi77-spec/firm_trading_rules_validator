@@ -1,0 +1,13 @@
+﻿Rule,Name,Status,Violations,Affected Trades,Description
+Rule 1,Hedging Ban,⚫ ERROR,-,-,No simultaneous Long/Short positions on same instrument
+Rule 3,Strategy Consistency,🟡 NOT_TESTABLE,-,-,Consistent trading behavior between phases
+Rule 4,Prohibited EAs,⚫ ERROR,-,-,No automated trading systems allowed
+Rule 12,All-or-Nothing Trading,⚫ ERROR,-,-,Single trade/idea cannot risk entire account
+Rule 13,Maximum Margin Usage,⚫ ERROR,-,-,Margin usage must stay below 80%
+Rule 14,Gambling Definition,⚫ ERROR,-,-,Max 50% of trades can be under 60 seconds
+Rule 15,One-Sided Bets,⚫ ERROR,-,-,Max 2 trades same direction per symbol
+Rule 16,Abuse of Simulated Environment,⚫ ERROR,-,-,Volume and SL requirements
+Rule 17,Max 2% Risk per Trade,⚫ ERROR,-,-,Direct Funding: max 2% risk per idea
+Rule 18,News Trading Restriction,⚫ ERROR,-,-,No trading ±5 min around news releases
+Rule 19,Weekend Trading Ban,⚫ ERROR,-,-,No trading Fri 22:00 - Sun 22:00 UTC
+Rule 23,Minimum Trading Days,⚫ ERROR,-,-,Minimum active trading days requirement

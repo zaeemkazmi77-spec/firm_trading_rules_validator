@@ -1,0 +1,232 @@
+--- Page 1 ---
+Project Plan: Rule Validation App
+🎯
+Application Objective
+The app validates trading data from CSV files against a fixed set of rules (provided by
+you).
+For each rule, the app must show:
+• whether it was passed, violated, or not testable,
+• which trades are aCected, and
+• a clear explanation of why it was flagged.
+The app will be developed as a Streamlit web application in Python.
+🧩
+Core Features
+1.
+Upload and Selection
+The user can:
+• Upload one or more CSV files (each representing one phase or account)
+• Select the account type:
+o 2-Step Challenge Phase 1
+o 2-Step Challenge Phase 2
+o 2-Step Challenge Funded Phase
+o Direct Funding
+• Select the account size:
+o 5,000, 10,000, 20,000, 25,000, 35,000, 50,000, 100,000, 150,000, 200,000
+
+--- Page 2 ---
+• Optionally enable the Add-on: News Trading and Weekend Holding
+2.
+Automatic Configuration
+The app must automatically load the correct internal configuration for margin, leverage,
+and contract sizes depending on the account type.
+Example configuration:
+Account Type Leverage Contract Size Notes
+2-Step Phase 1 1:100 Standard per broker Add-on not allowed
+2-Step Phase 2 1:100 Standard per broker Add-on not allowed
+Funded Phase 1:50 Standard per broker Add-on optional
+Direct Funding 1:30 Standard per broker Add-on optional
+These configurations must be stored in the backend as constants so that margin and
+risk rules can be calculated automatically.
+3.
+CSV Validation
+Before analysis, the app checks that:
+• All required columns are present (Open Time, Close Time, Position ID, Side,
+Instrument, Lots, Open Price, Close Price)
+• All time values are valid
+• Numerical fields are parsable
+• Open Time < Close Time (if not, swap and mark)
+• At least 95% of all rows are valid (otherwise, abort with an error list)
+4.
+
+--- Page 3 ---
+Rule Evaluation
+The app tests each rule individually.
+Each rule has one of the following three outcomes:
+Status Meaning
+✅ Passed No violation detected
+❌ Violated Clear rule violation
+⚠ Not testable Missing data (e.g. only one phase uploaded)
+Example:
+If only Phase 1 is uploaded, Rule 3 (Strategy Consistency) → “Not testable.”
+5.
+News and Weekend Validation
+News Trading (Rule 18)
+If the Add-on is OFF, the app:
+• Retrieves live news data from ForexFactory.com (API or web scraper)
+• Compares each trade’s open and close times with news release times
+• If a trade opens or closes within ±5 minutes (300 seconds) of a relevant news
+release → Violation
+• Only checks news aCecting the instrument’s base or quote currency (e.g., USD
+for XAUUSD, EUR for EURUSD, etc.)
+Weekend Rule (Rule 19)
+If the Add-on is OFF:
+• Weekend window = Friday 22:00 UTC → Sunday 22:00 UTC
+
+--- Page 4 ---
+• If a trade is opened, closed, or held open during this window → Violation
+• The app uses timezone-aware calendar logic (datetime + pytz) to detect
+weekends correctly.
+If the Add-on is ON, both Rules 18 and 19 are skipped.
+6.
+Results Display (Frontend)
+In the Streamlit dashboard:
+• One main table summarizing all rules:
+| Rule | Name | Status | Description | ACected Trades |
+• Color code:
+o 🟢 Green = Passed
+o 🔴 Red = Violated
+o 🟡 Yellow = Not testable
+• Below the table:
+o A plain text summary of all detected violations
+o Example:
+“On 12/09/2025, a hedging violation was detected on XAUUSD between Ticket 123 and
+124, overlapping for 45 seconds.”
+7.
+Export Functions
+User can export results as:
+• CSV file (for data review)
+• PDF report including:
+o Title (e.g., “Rule Analysis – 100K Account Phase 2”)
+o Summary table of all rules
+
+--- Page 5 ---
+o Detailed rule explanations
+o Full-text summary of all violations
+8.
+Error Handling and Logging
+If a rule cannot be evaluated (missing data, only one phase, etc.), the app must not
+crash.
+It displays a message such as:
+⚠ “Rule 3 – Strategy Consistency not testable because only one phase provided.”
+Logs should always include:
+• Which file caused the issue
+• Which rule was aCected
+• What exactly is missing (e.g., “No Stop-Loss values found”)
+9.
+Technical Specifications
+Framework:
+• Streamlit (frontend + backend logic)
+Language:
+• Python 3.11 or higher
+Recommended Libraries:
+• pandas – data analysis
+• numpy – calculations
+
+--- Page 6 ---
+• datetime, pytz – timezone logic
+• requests, BeautifulSoup – ForexFactory news retrieval
+• fpdf2 or reportlab – PDF export
+• streamlit-aggrid – interactive data tables
+• matplotlib or plotly – optional chart visualization
+🧠
+Additional Logic (Important)
+• All timestamps must be converted to UTC internally, displayed in Europe/Zurich.
+• A time overlap counts as simultaneous if the intervals overlap by ≥ 1 second.
+• Global tolerances:
+o Time: ±1 second
+o Price: ±0.00001
+o Lot size: ±0.0001
+📋
+Operational Workflow
+1. User opens the app
+2. Selects account type, size, and Add-on (Yes/No)
+3. Uploads one or more CSV files (e.g., Phase 1, 2, Funded)
+4. App reads and validates all files, groups data by phase
+5. App executes all active rules
+6. Displays results in the dashboard
+7. Allows export as CSV or PDF
+📘
+Trading Rulebook (Final Version)
+
+--- Page 7 ---
+Rule 1 – Hedging Ban
+It is strictly forbidden to hold Long and Short positions on the same instrument at the
+same time, across any accounts.
+An overlap occurs if the duration of opposing trades overlaps by 1 second or more.
+If one position closes exactly before the other opens → allowed.
+If any overlap ≥ 1 second → Violation.
+Rule 3 – Strategy Consistency
+Trading behavior must remain consistent between Evaluation and Funded phases.
+Metrics compared:
+1. Median trade duration (seconds)
+2. Average trades per day
+3. Median risk per trade (% of account)
+If at least 2 of 3 metrics diCer by ≥ 200% between phases → Violation.
+If any phase has fewer than 20 trades → Not testable.
+Rule 4 – Prohibited Third-Party Strategies (EAs)
+Use of prebuilt, purchased, or automated trading systems is forbidden in all phases.
+A violation occurs if:
+• at least 10 trades have identical patterns:
+o Stop-Loss distance diCerence ≤ 0.00001
+o Take-Profit distance diCerence ≤ 0.00001
+o Holding duration diCerence ≤ 1 second
+o Lot size diCerence ≤ 0.0001
+• and these trades occur across 3 or more distinct days.
+The pattern may occur on a single symbol; multiple symbols are not required.
+
+--- Page 8 ---
+If these conditions are met → Violation.
+Rule 12 – All-or-Nothing Trading
+No single trade or grouped trade idea may risk the entire account.
+If the total risk of the idea (based on Stop-Loss distances and trade sizes) is ≥ 100% of
+account equity → Violation.
+If no Stop-Loss is set → Not testable (but not counted as violation).
+Rule 13 – Maximum Margin Usage (80%)
+Used margin must never exceed 80% of account equity.
+If margin usage > 80.1% → Violation.
+Otherwise → No violation.
+This ensures at least 20% equity reserve.
+Rule 14 – Gambling Definition
+If more than 50% of all trades are held for less than 60 seconds, the account is
+classified as gambling → Violation.
+If 50% or fewer are under 60 seconds → No violation.
+Tolerance: ±1 second.
+Rule 15 – One-Sided Bets
+A trader may not have more than 2 trades open simultaneously in the same direction
+(Long or Short) on the same symbol.
+If 3 or more same-direction trades overlap in time → Violation.
+Otherwise → No violation.
+
+--- Page 9 ---
+Rule 16 – Abuse of Simulated Environment
+Within any 24-hour period, total traded volume must not exceed 10× account equity.
+If within that period ≥ 80% of trades were opened without a Stop-Loss and total volume
+≥ 10× equity → Violation.
+If one condition fails → No violation.
+Rule 17 – Max 2% Risk per Trade Idea (Direct Funding only)
+Applies only to Direct Funding accounts.
+A trade idea is defined as multiple trades on the same symbol and direction (Long or
+Short) where the time gap between openings is ≤ 5 minutes (≤ 60 seconds for XAUUSD).
+Total risk of all trades in the idea = (entry-to-Stop-Loss distance × position size × value
+per point).
+If risk > 2.05% of equity at first entry → Violation.
+If ≤ 2% → No violation.
+Rule 18 – News Trading Restriction
+Trading within 5 minutes (300 seconds) before or after a relevant economic news
+release is forbidden.
+Applies to manual and automatic executions (including SL/TP).
+If Add-on = OFF and trade falls in this window → Violation.
+If Add-on = ON → No violation.
+Rule 19 – Weekend Trading and Holding
+From Friday 22:00 UTC to Sunday 22:00 UTC, opening, closing, or holding positions is
+strictly prohibited.
+
+--- Page 10 ---
+If a position is active or modified during this window → Violation.
+If Add-on = ON → No violation.
+Rule 23 – Minimum Trading Days
+• 2-Step Challenge Phases 1 & 2: No minimum → Always Pass.
+• 2-Step Challenge Funded Stage: At least 4 active trading days required.
+o Fewer than 4 → Violation.
+• Direct Funding: At least 7 active trading days required.
+o Fewer than 7 → Violation.
