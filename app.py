@@ -522,19 +522,22 @@ def show_export_options(results: List[Dict]):
     """Show export buttons"""
     st.subheader("💾 Export Results")
     
+    # Get all trades DataFrame for exports
+    all_trades_df = pd.concat(st.session_state.validated_data.values(), ignore_index=True) if st.session_state.validated_data else pd.DataFrame()
+    
     col1, col2 = st.columns(2)
     
     with col1:
         if st.button("📥 Export to CSV", use_container_width=True):
-            export_to_csv(results)
+            export_to_csv(results, all_trades_df)
     
     with col2:
         if st.button("📄 Export to PDF", use_container_width=True):
-            export_to_pdf(results)
+            export_to_pdf(results, all_trades_df)
 
 
-def export_to_csv(results: List[Dict]):
-    """Export results to CSV with detailed violation information (parity with PDF)"""
+def export_to_csv(results: List[Dict], all_trades_df: pd.DataFrame):
+    """Export results to CSV with detailed violation information including actual trade data"""
     try:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -563,7 +566,7 @@ def export_to_csv(results: List[Dict]):
         df_summary = pd.DataFrame(summary_rows)
         df_summary = df_summary.fillna("")  # clean NaN
 
-        # --- 3) Detailed violations CSV (one row per affected trade/violation)
+        # --- 3) Detailed violations CSV (one row per affected trade with REAL trade data)
         violations_rows = []
         for r in results:
             if status_to_text(r.get("status", "")) != "[VIOLATED]":
@@ -582,32 +585,74 @@ def export_to_csv(results: List[Dict]):
                 }
 
                 if isinstance(v, dict):
-                    # normalize core fields first (for consistent order)
+                    # Extract Position ID from violation
+                    position_id = v.get("Position ID") or v.get("Position_ID") or v.get("Trigger_Position_ID") or ""
+                    
+                    # Try to get actual trade data from the DataFrame
+                    trade_data = {}
+                    if position_id and not all_trades_df.empty:
+                        matching_trades = all_trades_df[all_trades_df['Position ID'] == position_id]
+                        if not matching_trades.empty:
+                            trade = matching_trades.iloc[0]
+                            trade_data = {
+                                "Position ID": trade.get('Position ID', ''),
+                                "Instrument": trade.get('Instrument', ''),
+                                "Side": trade.get('Side', ''),
+                                "Lots": trade.get('Lots', ''),
+                                "Open Time": trade.get('Open Time', ''),
+                                "Close Time": trade.get('Close Time', ''),
+                                "Open Price": trade.get('Open Price', ''),
+                                "Close Price": trade.get('Close Price', ''),
+                                "Stop Loss": trade.get('Stop Loss', ''),
+                                "Take Profit": trade.get('Take Profit', ''),
+                                "PnL": trade.get('PnL', ''),
+                            }
+                    
+                    # If no trade data found, use whatever is in violation
+                    if not trade_data:
+                        trade_data = {
+                            "Position ID": position_id,
+                            "Instrument": v.get("Instrument", ""),
+                            "Side": v.get("Side", ""),
+                            "Lots": v.get("Lots", ""),
+                            "Open Time": v.get("Open Time", ""),
+                            "Close Time": v.get("Close Time", ""),
+                            "Open Price": v.get("Open Price", ""),
+                            "Close Price": v.get("Close Price", ""),
+                            "Stop Loss": v.get("Stop Loss", ""),
+                            "Take Profit": v.get("Take Profit", ""),
+                            "PnL": v.get("PnL", ""),
+                        }
+                    
+                    # Build complete row with base + trade data + violation info
                     row = {
                         **base,
-                        "Position ID": v.get("Position ID") or v.get("Position_ID", ""),
-                        "Instrument": v.get("Instrument", ""),
-                        "Side": v.get("Side", ""),
-                        "Lots": v.get("Lots", ""),
-                        "Open Time": v.get("Open Time", ""),
-                        "Close Time": v.get("Close Time", ""),
-                        "Open Price": v.get("Open Price", ""),
-                        "Close Price": v.get("Close Price", ""),
-                        "Stop Loss": v.get("Stop Loss", ""),
-                        "Take Profit": v.get("Take Profit", ""),
-                        "PnL": v.get("PnL", ""),
-                        "Violation Reason (row)": v.get("Violation_Reason") or v.get("violation_reason", ""),
+                        **trade_data,
+                        "Violation Reason": v.get("Violation_Reason") or v.get("violation_reason", ""),
                     }
-                    # append any extra keys deterministically, coercing to string
-                    extra_keys = [k for k in v.keys() if k not in row and k not in ("Position_ID",)]
+                    
+                    # Append any extra keys from violation dict
+                    extra_keys = [k for k in v.keys() if k not in row and k not in ("Position_ID", "Violation_Reason", "violation_reason")]
                     for k in sorted(extra_keys):
                         row[k] = "" if v[k] is None else str(v[k])
+                    
                     violations_rows.append(row)
                 else:
-                    # string violation payload
+                    # Handle string violations
                     violations_rows.append({
                         **base,
-                        "Violation Details": "" if v is None else str(v),
+                        "Position ID": "",
+                        "Instrument": "",
+                        "Side": "",
+                        "Lots": "",
+                        "Open Time": "",
+                        "Close Time": "",
+                        "Open Price": "",
+                        "Close Price": "",
+                        "Stop Loss": "",
+                        "Take Profit": "",
+                        "PnL": "",
+                        "Violation Reason": "" if v is None else str(v),
                     })
 
         # Prepare downloads
@@ -621,7 +666,7 @@ def export_to_csv(results: List[Dict]):
                 "Position ID", "Instrument", "Side", "Lots",
                 "Open Time", "Close Time", "Open Price", "Close Price",
                 "Stop Loss", "Take Profit", "PnL",
-                "Violation Reason (row)", "Violation Details",
+                "Violation Reason",
             ]
             df_viol = pd.DataFrame(violations_rows).fillna("")
             # Add any missing core columns
@@ -665,8 +710,8 @@ def export_to_csv(results: List[Dict]):
         st.error(f"Error exporting to CSV: {str(e)}")
 
 
-def export_to_pdf(results: List[Dict]):
-    """Export results to PDF"""
+def export_to_pdf(results: List[Dict], all_trades_df: pd.DataFrame):
+    """Export results to PDF with rule definitions and complete violation text"""
     try:
         from fpdf import FPDF
         
@@ -753,6 +798,38 @@ def export_to_pdf(results: List[Dict]):
         pdf.add_page()
         pdf.set_font('Arial', 'B', 16)
         
+        # Define complete rule descriptions as per Project Plan
+        rule_definitions = {
+            1: "Hedging Ban: It is strictly forbidden to hold Long and Short positions on the same instrument at the same time. An overlap occurs if opposing trades overlap by 1 second or more.",
+            3: "Strategy Consistency: Trading behavior must remain consistent between Evaluation and Funded phases. Metrics compared: median trade duration, average trades per day, and median risk per trade. If at least 2 of 3 metrics differ by >=200% between phases, it's a violation.",
+            4: "Prohibited Third-Party Strategies (EAs): Use of prebuilt, purchased, or automated trading systems is forbidden. A violation occurs if at least 10 trades have identical patterns (SL/TP/duration/lot size) across 3 or more distinct days.",
+            12: "All-or-Nothing Trading: No single trade or grouped trade idea may risk the entire account. If total risk of the idea >=100% of account equity, it's a violation.",
+            13: "Maximum Margin Usage (80%): Used margin must never exceed 80% of account equity. If margin usage >80.1%, it's a violation. This ensures at least 20% equity reserve.",
+            14: "Gambling Definition: If more than 50% of all trades are held for less than 60 seconds, the account is classified as gambling and results in a violation.",
+            15: "One-Sided Bets: A trader may not have more than 2 trades open simultaneously in the same direction (Long or Short) on the same symbol. If 3 or more same-direction trades overlap in time, it's a violation.",
+            16: "Abuse of Simulated Environment: Within any 24-hour period, if total traded volume >=10x account equity AND >=80% of trades were opened without a Stop-Loss, it's a violation. If one condition fails, no violation.",
+            17: "Max 2% Risk per Trade Idea (Direct Funding only): Applies only to Direct Funding accounts. A trade idea is defined as multiple trades on the same symbol and direction where the time gap between openings is <=5 minutes (<=60 seconds for XAUUSD). If total risk >2.05% of equity at first entry, it's a violation.",
+            18: "News Trading Restriction: Trading within 5 minutes (300 seconds) before or after a relevant economic news release is forbidden. Applies to manual and automatic executions (including SL/TP). If Add-on is OFF and trade falls in this window, it's a violation. If Add-on is ON, no violation.",
+            19: "Weekend Trading and Holding: From Friday 22:00 UTC to Sunday 22:00 UTC, opening, closing, or holding positions is strictly prohibited. If a position is active or modified during this window, it's a violation. If Add-on is ON, no violation.",
+            23: "Minimum Trading Days: 2-Step Challenge Phases 1 & 2 have no minimum (always Pass). 2-Step Challenge Funded Stage requires at least 4 active trading days. Direct Funding requires at least 7 active trading days. Fewer than required results in a violation.",
+        }
+        
+        # Rule names for display (even if not executed)
+        rule_names = {
+            1: "Hedging Ban",
+            3: "Strategy Consistency",
+            4: "Prohibited Third-Party Strategies (EAs)",
+            12: "All-or-Nothing Trading",
+            13: "Maximum Margin Usage (80%)",
+            14: "Gambling Definition",
+            15: "One-Sided Bets",
+            16: "Abuse of Simulated Environment",
+            17: "Max 2% Risk per Trade Idea",
+            18: "News Trading Restriction",
+            19: "Weekend Trading and Holding",
+            23: "Minimum Trading Days",
+        }
+        
         # Title
         account_type = st.session_state.get('account_type', 'Unknown')
         account_size = st.session_state.get('account_size', 0)
@@ -795,12 +872,50 @@ def export_to_pdf(results: List[Dict]):
             
             pdf.ln(2)
         
+        # Add DETAILED RULE EXPLANATIONS section (as per Project Plan requirements)
+        pdf.add_page()
+        pdf.set_font('Arial', 'B', 16)
+        pdf.cell(0, 10, 'DETAILED RULE EXPLANATIONS', 0, 1, 'C')
+        pdf.ln(5)
+        
+        # Show ALL rules (even if not executed), sorted by rule number
+        all_rule_numbers = sorted(rule_definitions.keys())
+        
+        for rule_num in all_rule_numbers:
+            # Check if we need a new page
+            if pdf.get_y() > 260:
+                pdf.add_page()
+            
+            # Get the rule name (from rule_names dict or from results)
+            rule_name = rule_names.get(rule_num, f"Rule {rule_num}")
+            
+            # Try to get rule name from results if available (for consistency)
+            for result in results:
+                if result.get('rule_number') == rule_num:
+                    result_name = result.get('rule_name', '')
+                    if result_name:
+                        rule_name = sanitize_for_pdf(result_name)
+                    break
+            
+            # Rule title
+            pdf.set_font('Arial', 'B', 11)
+            pdf.cell(0, 7, f'Rule {rule_num}: {rule_name}', 0, 1)
+            
+            # Rule definition
+            pdf.set_font('Arial', '', 9)
+            if rule_num in rule_definitions:
+                safe_multicell(pdf, rule_definitions[rule_num], line_height=5)
+            else:
+                safe_multicell(pdf, f'No detailed definition available for Rule {rule_num}.', line_height=5)
+            
+            pdf.ln(4)
+        
         # Add violations summary if any
         violations = [r for r in results if "VIOLATED" in r.get('status', '')]
         if violations:
             pdf.add_page()
             pdf.set_font('Arial', 'B', 16)
-            pdf.cell(0, 10, 'VIOLATION DETAILS', 0, 1, 'C')
+            pdf.cell(0, 10, 'FULL-TEXT SUMMARY OF ALL VIOLATIONS', 0, 1, 'C')
             pdf.ln(5)
             
             for result in violations:
@@ -850,45 +965,25 @@ def export_to_pdf(results: List[Dict]):
                             pdf.set_font('Arial', '', 8)  # Reset font after page break
                         
                         if isinstance(violation, dict):
-                            # Build violation entry text
+                            # Build violation entry text with FULL details (no truncation)
                             violation_text = f"{idx}. "
-                            
-                            # Add Position ID if available
-                            if 'Position ID' in violation:
-                                violation_text += f"Position {sanitize_for_pdf(str(violation['Position ID']))} - "
-                            elif 'Position_ID' in violation:
-                                violation_text += f"Position {sanitize_for_pdf(str(violation['Position_ID']))} - "
                             
                             # Add Instrument if available
                             if 'Instrument' in violation:
-                                violation_text += f"{sanitize_for_pdf(str(violation['Instrument']))} "
+                                violation_text += f"{sanitize_for_pdf(str(violation['Instrument']))} | "
                             
-                            # Add Side if available
-                            if 'Side' in violation:
-                                violation_text += f"({sanitize_for_pdf(str(violation['Side']))}) "
-                            
-                            # Add Open/Close times if available
-                            if 'Open Time' in violation:
-                                violation_text += f"Open: {sanitize_for_pdf(str(violation['Open Time']))} "
-                            if 'Close Time' in violation:
-                                violation_text += f"Close: {sanitize_for_pdf(str(violation['Close Time']))} "
-                            
-                            # Add violation reason if available
+                            # Add violation reason if available (FULL TEXT - no truncation)
                             if 'Violation_Reason' in violation:
-                                violation_text += f"| {sanitize_for_pdf(str(violation['Violation_Reason']))}"
+                                violation_text += f"{sanitize_for_pdf(str(violation['Violation_Reason']))}"
                             elif 'violation_reason' in violation:
-                                violation_text += f"| {sanitize_for_pdf(str(violation['violation_reason']))}"
+                                violation_text += f"{sanitize_for_pdf(str(violation['violation_reason']))}"
                             
-                            # Truncate if too long
-                            if len(violation_text) > 180:
-                                violation_text = violation_text[:177] + "..."
-                            
-                            # Use safe_multicell instead of multi_cell
+                            # Use safe_multicell to handle long text properly
                             safe_multicell(pdf, violation_text, line_height=4)
                         else:
-                            # Handle string violations
-                            violation_text = str(violation)[:180]
-                            safe_multicell(pdf, f"{idx}. {violation_text}", line_height=4)
+                            # Handle string violations (FULL TEXT - no truncation)
+                            violation_text = f"{idx}. {sanitize_for_pdf(str(violation))}"
+                            safe_multicell(pdf, violation_text, line_height=4)
                     
                     if len(violations_list) > 20:
                         if pdf.get_y() > 270:

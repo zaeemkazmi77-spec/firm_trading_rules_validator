@@ -329,6 +329,27 @@ This project is proprietary software for trading compliance validation.
 
 ## 🔄 Version History
 
+**Version 1.0.4** (October 2025)
+- 📄 **PDF Export Fix**: All 11 rules now appear in "Detailed Rule Explanations" section
+  - **Fixed missing rules**: Rules 17, 18, and 19 now always shown regardless of account type or add-on status
+  - Previously only showed rules that were executed in validation
+  - Now displays ALL rules (1, 3, 4, 12, 13, 14, 15, 16, 17, 18, 19, 23) with complete definitions
+  - Rule 17: Shown with "(Direct Funding only)" note
+  - Rules 18 & 19: Shown with add-on conditions clearly stated
+  - Ensures complete documentation even when rules are not applicable or skipped
+
+**Version 1.0.3** (October 2025)
+- 📊 **CSV Export Enhancement**: Detailed violations CSV now includes actual trade data
+  - Extracts real trade information (Position ID, Instrument, Side, Lots, Prices, etc.) from source DataFrame
+  - Matches violations to their corresponding trades for complete visibility
+  - Previously empty columns now properly populated with trade details
+- 📄 **PDF Export Major Update**: Now fully compliant with Project Plan requirements
+  - **Added "Detailed Rule Explanations" section**: Complete definitions of all 11 trading rules
+  - **Fixed incomplete violation text**: Removed 180-character truncation limit
+  - **Full violation summaries**: All violation reasons now display completely (no more "..." cutoffs)
+  - Renamed section to "Full-Text Summary of All Violations" per spec
+  - Better page break management for long violation lists
+
 **Version 1.0.2** (October 2025)
 - 🔧 **Rule 16 Final Compliance Updates**:
   - **"No SL" detection**: Now treats both `NaN` and `0` as missing Stop Loss (consistent with risk calculations elsewhere)
