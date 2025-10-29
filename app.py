@@ -534,35 +534,133 @@ def show_export_options(results: List[Dict]):
 
 
 def export_to_csv(results: List[Dict]):
-    """Export results to CSV"""
+    """Export results to CSV with detailed violation information (parity with PDF)"""
     try:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
-        # Create summary DataFrame
-        summary_data = []
-        for result in results:
-            summary_data.append({
-                'Rule Number': result.get('rule_number'),
-                'Rule Name': result.get('rule_name'),
-                'Status': result.get('status'),
-                'Message': result.get('message', ''),
-                'Violations Found': result.get('violations_found', result.get('pattern_groups_found', 0))
+
+        # --- 1) Match PDF status mapping
+        def status_to_text(status: str) -> str:
+            s = str(status or "")
+            if "PASSED" in s or "✅" in s:
+                return "[PASSED]"
+            if "VIOLATED" in s or "❌" in s:
+                return "[VIOLATED]"
+            if "NOT TESTABLE" in s or "⚠" in s:
+                return "[NOT TESTABLE]"
+            return s
+
+        # --- 2) Summary CSV (one row per rule)
+        summary_rows = []
+        for r in results:
+            summary_rows.append({
+                "Rule Number": r.get("rule_number"),
+                "Rule Name": r.get("rule_name"),
+                "Status": status_to_text(r.get("status", "")),
+                "Message": r.get("message", ""),
+                "Total Violations": len(r.get("violations", [])) if r.get("violations") else 0,
+                "Violation Reason": r.get("violation_reason", ""),
             })
-        
-        df_summary = pd.DataFrame(summary_data)
-        
-        # Convert to CSV
-        csv = df_summary.to_csv(index=False)
-        
-        st.download_button(
-            label="Download CSV",
-            data=csv,
-            file_name=f"rule_results_{timestamp}.csv",
-            mime="text/csv"
-        )
-        
-        st.success("✅ CSV export ready!")
-        
+        df_summary = pd.DataFrame(summary_rows)
+        df_summary = df_summary.fillna("")  # clean NaN
+
+        # --- 3) Detailed violations CSV (one row per affected trade/violation)
+        violations_rows = []
+        for r in results:
+            if status_to_text(r.get("status", "")) != "[VIOLATED]":
+                continue
+
+            rule_num = r.get("rule_number")
+            rule_name = r.get("rule_name")
+            violations_list = r.get("violations", []) or []
+
+            for idx, v in enumerate(violations_list, 1):
+                base = {
+                    "Rule Number": rule_num,
+                    "Rule Name": rule_name,
+                    "Rule Status": "[VIOLATED]",
+                    "Violation #": idx,
+                }
+
+                if isinstance(v, dict):
+                    # normalize core fields first (for consistent order)
+                    row = {
+                        **base,
+                        "Position ID": v.get("Position ID") or v.get("Position_ID", ""),
+                        "Instrument": v.get("Instrument", ""),
+                        "Side": v.get("Side", ""),
+                        "Lots": v.get("Lots", ""),
+                        "Open Time": v.get("Open Time", ""),
+                        "Close Time": v.get("Close Time", ""),
+                        "Open Price": v.get("Open Price", ""),
+                        "Close Price": v.get("Close Price", ""),
+                        "Stop Loss": v.get("Stop Loss", ""),
+                        "Take Profit": v.get("Take Profit", ""),
+                        "PnL": v.get("PnL", ""),
+                        "Violation Reason (row)": v.get("Violation_Reason") or v.get("violation_reason", ""),
+                    }
+                    # append any extra keys deterministically, coercing to string
+                    extra_keys = [k for k in v.keys() if k not in row and k not in ("Position_ID",)]
+                    for k in sorted(extra_keys):
+                        row[k] = "" if v[k] is None else str(v[k])
+                    violations_rows.append(row)
+                else:
+                    # string violation payload
+                    violations_rows.append({
+                        **base,
+                        "Violation Details": "" if v is None else str(v),
+                    })
+
+        # Prepare downloads
+        csv_summary = df_summary.to_csv(index=False)
+
+        # Only create & offer the detailed CSV if there are any rows
+        if violations_rows:
+            # Ensure deterministic column order: base + common core fields first
+            core_order = [
+                "Rule Number", "Rule Name", "Rule Status", "Violation #",
+                "Position ID", "Instrument", "Side", "Lots",
+                "Open Time", "Close Time", "Open Price", "Close Price",
+                "Stop Loss", "Take Profit", "PnL",
+                "Violation Reason (row)", "Violation Details",
+            ]
+            df_viol = pd.DataFrame(violations_rows).fillna("")
+            # Add any missing core columns
+            for col in core_order:
+                if col not in df_viol.columns:
+                    df_viol[col] = ""
+            # Put core first, extras after (sorted)
+            extras = [c for c in df_viol.columns if c not in core_order]
+            df_viol = df_viol[core_order + sorted(extras)]
+            csv_violations = df_viol.to_csv(index=False)
+
+            c1, c2 = st.columns(2)
+            with c1:
+                st.download_button(
+                    label="📊 Download Summary CSV",
+                    data=csv_summary,
+                    file_name=f"rule_summary_{timestamp}.csv",
+                    mime="text/csv",
+                    help="Download rule summary with overall results"
+                )
+            with c2:
+                st.download_button(
+                    label="🔍 Download Detailed Violations CSV",
+                    data=csv_violations,
+                    file_name=f"violations_detailed_{timestamp}.csv",
+                    mime="text/csv",
+                    help="Download detailed violation information for each affected trade"
+                )
+            st.success(f"✅ CSV exports ready! Summary + {len(df_viol)} violation rows")
+        else:
+            st.download_button(
+                label="📊 Download Summary CSV",
+                data=csv_summary,
+                file_name=f"rule_summary_{timestamp}.csv",
+                mime="text/csv",
+                help="Download rule summary with overall results"
+            )
+            st.success("✅ Summary CSV export ready! No violations to export.")
+
     except Exception as e:
         st.error(f"Error exporting to CSV: {str(e)}")
 
@@ -571,6 +669,74 @@ def export_to_pdf(results: List[Dict]):
     """Export results to PDF"""
     try:
         from fpdf import FPDF
+        
+        # Helper function to sanitize text for PDF (Latin-1 encoding)
+        def sanitize_for_pdf(text: str) -> str:
+            """Replace Unicode characters with ASCII-safe equivalents for PDF"""
+            if not text:
+                return ""
+            
+            # Replace common Unicode symbols with ASCII-safe versions
+            replacements = {
+                "≥": ">=",
+                "≤": "<=",
+                "×": "x",
+                "–": "-",
+                "—": "-",
+                """: '"',
+                """: '"',
+                "'": "'",
+                "'": "'",
+                "•": "-",
+                "→": "->",
+                "←": "<-",
+                "↔": "<->",
+                "✔": "OK",
+                "✅": "[PASSED]",
+                "❌": "[VIOLATED]",
+                "⚠": "[WARN]",
+                "⚠️": "[WARN]",
+                "⏭": "[SKIP]",
+                "⏭️": "[SKIP]",
+                "℃": "C",
+                "°": " deg",
+                "±": "+/-",
+            }
+            
+            for k, v in replacements.items():
+                text = text.replace(k, v)
+            
+            # Strip remaining non-Latin-1 characters
+            try:
+                return text.encode("latin-1", "ignore").decode("latin-1")
+            except:
+                return text
+        
+        # Safe multi_cell helper to prevent horizontal space errors
+        def safe_multicell(pdf, text: str, line_height: float = 4.0):
+            """Safely write multi-line text with proper width and position handling"""
+            # Ensure text is a string
+            text = "" if text is None else str(text)
+            
+            # Sanitize text
+            text = sanitize_for_pdf(text)
+            
+            # Insert spaces in very long unbreakable tokens so fpdf can wrap
+            def break_long_tokens(s: str, maxlen: int = 60) -> str:
+                out = []
+                for tok in s.split(" "):
+                    if len(tok) > maxlen:
+                        out.extend(tok[i:i+maxlen] for i in range(0, len(tok), maxlen))
+                    else:
+                        out.append(tok)
+                return " ".join(out)
+            
+            text = break_long_tokens(text)
+            
+            # Reset X and give multi_cell an explicit width
+            content_width = pdf.w - pdf.l_margin - pdf.r_margin
+            pdf.set_x(pdf.l_margin)
+            pdf.multi_cell(content_width, line_height, text)
         
         # Helper function to convert emoji status to text
         def status_to_text(status: str) -> str:
@@ -581,7 +747,7 @@ def export_to_pdf(results: List[Dict]):
                 return "[VIOLATED]"
             elif "NOT TESTABLE" in status or "⚠" in status:
                 return "[NOT TESTABLE]"
-            return status.replace("✅", "[PASSED]").replace("❌", "[VIOLATED]").replace("⚠️", "[NOT TESTABLE]")
+            return sanitize_for_pdf(status.replace("✅", "[PASSED]").replace("❌", "[VIOLATED]").replace("⚠️", "[NOT TESTABLE]"))
         
         pdf = FPDF()
         pdf.add_page()
@@ -612,9 +778,9 @@ def export_to_pdf(results: List[Dict]):
         
         for result in results:
             rule_num = result.get('rule_number')
-            rule_name = result.get('rule_name', f'Rule {rule_num}')
+            rule_name = sanitize_for_pdf(result.get('rule_name', f'Rule {rule_num}'))
             status = status_to_text(result.get('status', ''))
-            message = result.get('message', '')
+            message = sanitize_for_pdf(result.get('message', ''))
             
             # Rule header
             pdf.set_font('Arial', 'B', 10)
@@ -625,7 +791,7 @@ def export_to_pdf(results: List[Dict]):
                 pdf.set_font('Arial', '', 9)
                 # Handle long messages - split into multiple lines if needed
                 message_clean = message.replace('\n', ' ')[:200]  # Limit length
-                pdf.multi_cell(0, 6, f'  {message_clean}')
+                safe_multicell(pdf, f'  {message_clean}', line_height=6)
             
             pdf.ln(2)
         
@@ -633,28 +799,108 @@ def export_to_pdf(results: List[Dict]):
         violations = [r for r in results if "VIOLATED" in r.get('status', '')]
         if violations:
             pdf.add_page()
-            pdf.set_font('Arial', 'B', 14)
-            pdf.cell(0, 10, 'Violation Details', 0, 1)
-            pdf.set_font('Arial', '', 10)
+            pdf.set_font('Arial', 'B', 16)
+            pdf.cell(0, 10, 'VIOLATION DETAILS', 0, 1, 'C')
+            pdf.ln(5)
             
             for result in violations:
                 rule_num = result.get('rule_number')
-                rule_name = result.get('rule_name', f'Rule {rule_num}')
-                details = result.get('details', [])
+                rule_name = sanitize_for_pdf(result.get('rule_name', f'Rule {rule_num}'))
                 
-                pdf.set_font('Arial', 'B', 11)
-                pdf.cell(0, 8, f'Rule {rule_num}: {rule_name}', 0, 1)
-                pdf.set_font('Arial', '', 9)
+                # Rule header with box
+                pdf.set_fill_color(255, 230, 230)  # Light red background
+                pdf.set_font('Arial', 'B', 12)
+                pdf.cell(0, 8, f'Rule {rule_num}: {rule_name} - [VIOLATED]', 0, 1, 'L', True)
+                pdf.ln(2)
                 
-                if details:
-                    for i, detail in enumerate(details[:10], 1):  # Limit to 10 details per rule
-                        detail_text = str(detail)[:150]  # Limit detail length
-                        pdf.multi_cell(0, 5, f'  {i}. {detail_text}')
+                # Violation reason
+                if 'violation_reason' in result:
+                    # Check if we need a new page
+                    if pdf.get_y() > 250:
+                        pdf.add_page()
                     
-                    if len(details) > 10:
-                        pdf.cell(0, 5, f'  ... and {len(details) - 10} more violations', 0, 1)
+                    pdf.set_font('Arial', 'B', 10)
+                    pdf.cell(0, 6, 'Violation Reason:', 0, 1)
+                    pdf.set_font('Arial', '', 9)
+                    reason_text = result['violation_reason'].replace('\n', ' ')[:300]
+                    safe_multicell(pdf, reason_text, line_height=5)
+                    pdf.ln(2)
                 
-                pdf.ln(3)
+                # Violation details/trades
+                violations_list = result.get('violations', [])
+                if violations_list:
+                    # Check if we need a new page
+                    if pdf.get_y() > 240:
+                        pdf.add_page()
+                    
+                    pdf.set_font('Arial', 'B', 10)
+                    pdf.cell(0, 6, f'Total Violations: {len(violations_list)}', 0, 1)
+                    pdf.ln(2)
+                    
+                    # Show detailed violations
+                    pdf.set_font('Arial', 'B', 9)
+                    pdf.cell(0, 5, 'Affected Trades:', 0, 1)
+                    pdf.set_font('Arial', '', 8)
+                    
+                    # Display first 20 violations
+                    for idx, violation in enumerate(violations_list[:20], 1):
+                        # Check if we need a new page before each violation
+                        if pdf.get_y() > 270:
+                            pdf.add_page()
+                            pdf.set_font('Arial', '', 8)  # Reset font after page break
+                        
+                        if isinstance(violation, dict):
+                            # Build violation entry text
+                            violation_text = f"{idx}. "
+                            
+                            # Add Position ID if available
+                            if 'Position ID' in violation:
+                                violation_text += f"Position {sanitize_for_pdf(str(violation['Position ID']))} - "
+                            elif 'Position_ID' in violation:
+                                violation_text += f"Position {sanitize_for_pdf(str(violation['Position_ID']))} - "
+                            
+                            # Add Instrument if available
+                            if 'Instrument' in violation:
+                                violation_text += f"{sanitize_for_pdf(str(violation['Instrument']))} "
+                            
+                            # Add Side if available
+                            if 'Side' in violation:
+                                violation_text += f"({sanitize_for_pdf(str(violation['Side']))}) "
+                            
+                            # Add Open/Close times if available
+                            if 'Open Time' in violation:
+                                violation_text += f"Open: {sanitize_for_pdf(str(violation['Open Time']))} "
+                            if 'Close Time' in violation:
+                                violation_text += f"Close: {sanitize_for_pdf(str(violation['Close Time']))} "
+                            
+                            # Add violation reason if available
+                            if 'Violation_Reason' in violation:
+                                violation_text += f"| {sanitize_for_pdf(str(violation['Violation_Reason']))}"
+                            elif 'violation_reason' in violation:
+                                violation_text += f"| {sanitize_for_pdf(str(violation['violation_reason']))}"
+                            
+                            # Truncate if too long
+                            if len(violation_text) > 180:
+                                violation_text = violation_text[:177] + "..."
+                            
+                            # Use safe_multicell instead of multi_cell
+                            safe_multicell(pdf, violation_text, line_height=4)
+                        else:
+                            # Handle string violations
+                            violation_text = str(violation)[:180]
+                            safe_multicell(pdf, f"{idx}. {violation_text}", line_height=4)
+                    
+                    if len(violations_list) > 20:
+                        if pdf.get_y() > 270:
+                            pdf.add_page()
+                        pdf.set_font('Arial', 'I', 9)
+                        pdf.cell(0, 5, f'... and {len(violations_list) - 20} more violations', 0, 1)
+                
+                pdf.ln(5)
+                
+                # Add page break if needed
+                if pdf.get_y() > 250:
+                    pdf.add_page()
         
         # Generate PDF bytes safely for Streamlit
         out = pdf.output(dest='S')  # can be str, bytes, or bytearray depending on fpdf version

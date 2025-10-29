@@ -1,4 +1,6 @@
-# Streamlit Dashboard Requirements
+# Trading Rule Validation Dashboard - Requirements
+# Python 3.11+ recommended
+
 # Core Framework
 streamlit>=1.28.0
 
@@ -8,23 +10,12 @@ numpy>=1.24.0
 
 # Date and Time
 pytz>=2023.3
+python-dateutil>=2.8.0
 
-# Web Scraping for News Data
+# Web Scraping for News Data (Rule 18)
 requests>=2.31.0
 beautifulsoup4>=4.12.0
 lxml>=4.9.0
 
 # PDF Generation
 fpdf2>=2.7.6
-reportlab>=4.0.0
-
-# Interactive Tables
-streamlit-aggrid>=0.3.4
-
-# Data Visualization
-plotly>=5.17.0
-matplotlib>=3.7.0
-
-# Additional utilities
-python-dateutil>=2.8.0
-openpyxl>=3.1.0

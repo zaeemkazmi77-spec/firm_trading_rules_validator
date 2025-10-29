@@ -4,6 +4,15 @@
 
 A comprehensive Streamlit-based web application for validating trading data against proprietary firm compliance rules. This dashboard analyzes CSV trade history files and checks them against 11 different trading rules to ensure compliance with firm regulations.
 
+**Key Features:**
+- ✅ Multi-file upload with phase management
+- ✅ Real-time rule validation
+- ✅ Detailed violation tracking with trade-level information
+- ✅ Professional PDF reports with complete violation summaries
+- ✅ Dual CSV exports (summary + detailed violations)
+- ✅ Independent News Trading and Weekend Holding add-ons
+- ✅ Comprehensive error handling and logging
+
 ## 🚀 Quick Start
 
 ### Installation
@@ -34,15 +43,19 @@ The application will open in your default web browser at `http://localhost:8501`
 - **Account Configuration**: 
   - Select account type (2-Step Phase 1/2, Funded Phase, Direct Funding)
   - Choose account size ($5K - $200K)
-  - Enable/disable add-ons for news trading and weekend holding
+  - Enable/disable **News Trading Add-on** (independent control)
+  - Enable/disable **Weekend Holding Add-on** (independent control)
+  - Both add-ons available for all account types
 - **Automated Rule Validation**: Tests 11 different trading rules
 - **Comprehensive Reporting**: 
   - Color-coded results (✅ Passed, ❌ Violated, ⚠️ Not Testable)
   - Detailed violation explanations
   - Affected trade identification
 - **Export Options**:
-  - CSV export of results
-  - PDF report generation
+  - **CSV Export**: Generates TWO CSV files:
+    - Summary file with overall rule results (normalized [PASSED]/[VIOLATED]/[NOT TESTABLE] status)
+    - Detailed violations file with all affected trades and violation specifics
+  - **PDF Report**: Professional report with comprehensive violation details, affected trade information, and trade-level summaries
 
 ## 📁 CSV File Requirements
 
@@ -88,27 +101,31 @@ Open Time,Close Time,Position ID,Side,Instrument,Lots,Open Price,Close Price,PnL
 
 ### 2-Step Challenge Phase 1
 - **Leverage**: 1:100
-- **Add-on Available**: No
+- **News Trading Add-on**: Available
+- **Weekend Holding Add-on**: Available
 - **Minimum Trading Days**: None
-- **Active Rules**: All standard rules
+- **Active Rules**: All standard rules (Rules 18 & 19 become informational if respective add-on enabled)
 
 ### 2-Step Challenge Phase 2
 - **Leverage**: 1:100
-- **Add-on Available**: No
+- **News Trading Add-on**: Available
+- **Weekend Holding Add-on**: Available
 - **Minimum Trading Days**: None
-- **Active Rules**: All standard rules
+- **Active Rules**: All standard rules (Rules 18 & 19 become informational if respective add-on enabled)
 
 ### Funded Phase
 - **Leverage**: 1:50
-- **Add-on Available**: Yes
+- **News Trading Add-on**: Available
+- **Weekend Holding Add-on**: Available
 - **Minimum Trading Days**: 4
-- **Active Rules**: All rules (18 & 19 skipped if add-on enabled)
+- **Active Rules**: All standard rules (Rules 18 & 19 become informational if respective add-on enabled)
 
 ### Direct Funding
 - **Leverage**: 1:30
-- **Add-on Available**: Yes
+- **News Trading Add-on**: Available
+- **Weekend Holding Add-on**: Available
 - **Minimum Trading Days**: 7
-- **Active Rules**: All rules including Rule 17 (Max 2% Risk)
+- **Active Rules**: All rules including Rule 17 (Max 2% Risk) (Rules 18 & 19 become informational if respective add-on enabled)
 
 ## 📜 Trading Rules
 
@@ -161,10 +178,12 @@ Limits risk per trade idea to 2% of equity.
 ### Rule 18: News Trading Restriction
 Prohibits trading around major economic news releases.
 
-**Violation**: Trading within ±5 minutes of relevant news (skipped if add-on enabled).
+**Violation**: Trading within ±5 minutes of relevant high-impact news (becomes informational if News Trading Add-on is enabled).
 
 ### Rule 19: Weekend Trading and Holding
 Prohibits weekend trading (Friday 22:00 UTC - Sunday 22:00 UTC).
+
+**Violation**: Trading or holding positions during weekend window (becomes informational if Weekend Holding Add-on is enabled).
 
 **Violation**: Opening, closing, or holding positions during weekend window (skipped if add-on enabled).
 
@@ -181,7 +200,10 @@ Requires minimum number of active trading days.
 ### Step 1: Configure Account
 1. Select your **account type** from the sidebar
 2. Choose your **account size**
-3. Enable **add-ons** if applicable (only for Funded Phase and Direct Funding)
+3. Enable **News Trading Add-on** if needed (available for all account types)
+4. Enable **Weekend Holding Add-on** if needed (available for all account types)
+   - Both add-ons work independently
+   - When enabled, respective rules (18 & 19) become informational only
 
 ### Step 2: Upload Files
 1. Click **"Browse files"** to upload CSV file(s)
@@ -203,8 +225,10 @@ Requires minimum number of active trading days.
 - **Text Summary**: Read human-readable violation descriptions
 
 ### Step 5: Export Results
-- **CSV Export**: Download detailed results in CSV format
-- **PDF Export**: Generate professional PDF report
+- **CSV Export**: Downloads TWO CSV files:
+  1. **Summary CSV**: Overall rule results with normalized status ([PASSED]/[VIOLATED]/[NOT TESTABLE])
+  2. **Violations CSV**: Detailed breakdown of all violations with affected trade information
+- **PDF Export**: Professional report with comprehensive violation details, trade-level summaries, and formatted tables
 
 ## 🔧 Troubleshooting
 
@@ -223,7 +247,7 @@ Requires minimum number of active trading days.
 - **Solution**: Upload separate CSV files for Phase 1 and Phase 2, each with at least 20 trades
 
 **Issue**: Rule 18 shows "Not Testable"
-- **Solution**: This is expected - the rule requires ForexFactory API integration which may not be available
+- **Solution**: Rule 18 requires fetching news data from ForexFactory. If the API is unavailable or there are network issues, the rule becomes non-testable. Enable the News Trading Add-on to make this rule informational only.
 
 **Issue**: Dashboard is slow with large files
 - **Solution**: 
@@ -234,11 +258,12 @@ Requires minimum number of active trading days.
 ## 📊 Technical Details
 
 ### Technology Stack
-- **Framework**: Streamlit
-- **Data Processing**: Pandas, NumPy
-- **Timezone Handling**: pytz
-- **PDF Generation**: fpdf2
-- **Visualization**: Plotly, Matplotlib
+- **Framework**: Streamlit 1.28.0+
+- **Data Processing**: Pandas 2.0.0+, NumPy 1.24.0+
+- **Timezone Handling**: pytz 2023.3+, python-dateutil 2.8.2+
+- **Web Scraping**: requests, beautifulsoup4, lxml (for Rule 18 news data)
+- **PDF Generation**: fpdf2 2.7.6+
+- **Python Version**: 3.11+ recommended
 
 ### Data Processing
 - All timestamps converted to UTC internally
@@ -249,16 +274,31 @@ Requires minimum number of active trading days.
   - Price: ±0.00001
   - Lot size: ±0.0001
 
+### Export Features
+- **CSV**: 
+  - Deterministic column ordering
+  - Normalized status values for machine readability
+  - Clean data with proper type coercion
+  - Separate detailed violations file with trade-level information
+- **PDF**: 
+  - ASCII-safe text encoding (Unicode symbols converted)
+  - Automatic page break management
+  - Comprehensive violation summaries
+  - Trade-level detail tables
+
 ## 📝 Project Structure
 
 ```
 trading_rule/
-├── app.py                 # Main Streamlit application
+├── app.py                 # Main Streamlit application (~860 lines)
 ├── dashboard_utils.py     # Utility functions for dashboard
 ├── rule_executor.py       # Rule execution coordinator
-├── requirements.txt       # Python dependencies
-├── rules/                 # Rule validation modules
-│   ├── config.py         # Configuration constants
+├── requirements.txt       # Python dependencies (simplified)
+├── README.md             # This file
+├── .gitignore            # Git exclusion rules
+├── Trades121.csv         # Sample data file
+├── rules/                # Rule validation modules
+│   ├── config.py         # Configuration constants and account types
 │   ├── utils.py          # Shared utilities
 │   ├── Rule_1.py         # Hedging Ban
 │   ├── Rule_3.py         # Strategy Consistency
@@ -268,11 +308,11 @@ trading_rule/
 │   ├── Rule_14.py        # Gambling Definition
 │   ├── Rule_15.py        # One-Sided Bets
 │   ├── Rule_16.py        # Abuse of Environment
-│   ├── Rule_17.py        # Max 2% Risk
-│   ├── Rule_18.py        # News Trading
+│   ├── Rule_17.py        # Max 2% Risk (Direct Funding only)
+│   ├── Rule_18.py        # News Trading (with ForexFactory scraping)
 │   ├── Rule_19.py        # Weekend Trading
 │   └── Rule_23.py        # Minimum Trading Days
-└── Trades121.csv          # Sample data file
+└── Temp/                 # Archived/unused files (excluded from git)
 ```
 
 ## 🤝 Support
@@ -290,8 +330,18 @@ This project is proprietary software for trading compliance validation.
 ## 🔄 Version History
 
 **Version 1.0.0** (October 2025)
-- Initial release
-- Full rule validation suite
-- CSV and PDF export
-- Multi-phase support
-- Comprehensive error handling
+- ✅ Initial release with full rule validation suite
+- ✅ 11 trading rules implemented and tested
+- ✅ Dual CSV export (summary + detailed violations)
+- ✅ Professional PDF reports with comprehensive violation details
+- ✅ Multi-phase support (Phase 1, Phase 2, Funded)
+- ✅ Independent News Trading and Weekend Holding add-ons
+- ✅ Add-ons available for all account types (2-Step, Funded, Direct Funding)
+- ✅ Enhanced data quality validation (95% threshold)
+- ✅ Comprehensive error handling and logging
+- ✅ Timezone-aware processing (UTC ↔ Europe/Zurich)
+- ✅ ForexFactory news data integration (Rule 18)
+
+---
+
+**Built with ❤️ for prop trading compliance validation**
