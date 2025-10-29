@@ -572,6 +572,17 @@ def export_to_pdf(results: List[Dict]):
     try:
         from fpdf import FPDF
         
+        # Helper function to convert emoji status to text
+        def status_to_text(status: str) -> str:
+            """Convert emoji status to PDF-friendly text"""
+            if "PASSED" in status or "✅" in status:
+                return "[PASSED]"
+            elif "VIOLATED" in status or "❌" in status:
+                return "[VIOLATED]"
+            elif "NOT TESTABLE" in status or "⚠" in status:
+                return "[NOT TESTABLE]"
+            return status.replace("✅", "[PASSED]").replace("❌", "[VIOLATED]").replace("⚠️", "[NOT TESTABLE]")
+        
         pdf = FPDF()
         pdf.add_page()
         pdf.set_font('Arial', 'B', 16)
@@ -579,7 +590,7 @@ def export_to_pdf(results: List[Dict]):
         # Title
         account_type = st.session_state.get('account_type', 'Unknown')
         account_size = st.session_state.get('account_size', 0)
-        pdf.cell(0, 10, f'Trading Rule Validation Report', 0, 1, 'C')
+        pdf.cell(0, 10, 'Trading Rule Validation Report', 0, 1, 'C')
         pdf.set_font('Arial', '', 12)
         pdf.cell(0, 10, f'Account: {account_type} - ${account_size:,}', 0, 1, 'C')
         pdf.cell(0, 10, f'Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}', 0, 1, 'C')
@@ -588,7 +599,7 @@ def export_to_pdf(results: List[Dict]):
         # Summary
         overall_status, counts = utils.calculate_overall_status(results)
         pdf.set_font('Arial', 'B', 14)
-        pdf.cell(0, 10, f'Overall Status: {overall_status}', 0, 1)
+        pdf.cell(0, 10, f'Overall Status: {status_to_text(overall_status)}', 0, 1)
         pdf.set_font('Arial', '', 11)
         pdf.cell(0, 8, f'Total Rules Tested: {counts["total"]}', 0, 1)
         pdf.cell(0, 8, f'Passed: {counts["passed"]} | Violated: {counts["violated"]} | Not Testable: {counts["not_testable"]}', 0, 1)
@@ -601,19 +612,62 @@ def export_to_pdf(results: List[Dict]):
         
         for result in results:
             rule_num = result.get('rule_number')
-            rule_name = result.get('rule_name')
-            status = result.get('status')
+            rule_name = result.get('rule_name', f'Rule {rule_num}')
+            status = status_to_text(result.get('status', ''))
+            message = result.get('message', '')
             
+            # Rule header
+            pdf.set_font('Arial', 'B', 10)
             pdf.cell(0, 8, f'Rule {rule_num}: {rule_name} - {status}', 0, 1)
+            
+            # Rule message/description
+            if message:
+                pdf.set_font('Arial', '', 9)
+                # Handle long messages - split into multiple lines if needed
+                message_clean = message.replace('\n', ' ')[:200]  # Limit length
+                pdf.multi_cell(0, 6, f'  {message_clean}')
+            
+            pdf.ln(2)
         
-        # Generate PDF
-        pdf_output = pdf.output(dest='S').encode('latin-1')
+        # Add violations summary if any
+        violations = [r for r in results if "VIOLATED" in r.get('status', '')]
+        if violations:
+            pdf.add_page()
+            pdf.set_font('Arial', 'B', 14)
+            pdf.cell(0, 10, 'Violation Details', 0, 1)
+            pdf.set_font('Arial', '', 10)
+            
+            for result in violations:
+                rule_num = result.get('rule_number')
+                rule_name = result.get('rule_name', f'Rule {rule_num}')
+                details = result.get('details', [])
+                
+                pdf.set_font('Arial', 'B', 11)
+                pdf.cell(0, 8, f'Rule {rule_num}: {rule_name}', 0, 1)
+                pdf.set_font('Arial', '', 9)
+                
+                if details:
+                    for i, detail in enumerate(details[:10], 1):  # Limit to 10 details per rule
+                        detail_text = str(detail)[:150]  # Limit detail length
+                        pdf.multi_cell(0, 5, f'  {i}. {detail_text}')
+                    
+                    if len(details) > 10:
+                        pdf.cell(0, 5, f'  ... and {len(details) - 10} more violations', 0, 1)
+                
+                pdf.ln(3)
+        
+        # Generate PDF bytes safely for Streamlit
+        out = pdf.output(dest='S')  # can be str, bytes, or bytearray depending on fpdf version
+        if isinstance(out, (bytes, bytearray)):
+            pdf_bytes = bytes(out)           # normalize bytearray -> bytes
+        else:
+            pdf_bytes = out.encode('latin-1')  # fpdf/pyfpdf returns str -> encode to bytes
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
         st.download_button(
-            label="Download PDF",
-            data=pdf_output,
+            label="📄 Download PDF Report",
+            data=pdf_bytes,
             file_name=f"rule_report_{timestamp}.pdf",
             mime="application/pdf"
         )
