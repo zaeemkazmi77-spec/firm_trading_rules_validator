@@ -45,11 +45,19 @@ def check_abuse_of_sim_environment(df: pd.DataFrame, account_equity: float) -> d
         if len(window_trades) == 0:
             continue
         
-        # Calculate total volume
-        total_volume = window_trades['Lots'].sum()
+        # Calculate total notional volume (in currency, not lots)
+        total_volume = 0
+        for _, trade in window_trades.iterrows():
+            notional = utils.calculate_notional_volume(
+                trade['Lots'], 
+                trade['Instrument'], 
+                trade['Open Price']
+            )
+            total_volume += notional
         
-        # Calculate percentage of trades without SL
-        trades_without_sl = window_trades['Stop Loss'].isna().sum()
+        # Calculate percentage of trades without SL (NaN or 0)
+        no_sl_mask = window_trades['Stop Loss'].isna() | (window_trades['Stop Loss'] == 0)
+        trades_without_sl = no_sl_mask.sum()
         no_sl_percent = (trades_without_sl / len(window_trades)) * 100
         
         # Check both conditions
@@ -70,19 +78,19 @@ def check_abuse_of_sim_environment(df: pd.DataFrame, account_equity: float) -> d
                 violation_reason = (
                     f"SIMULATED ENVIRONMENT ABUSE VIOLATION: During the 24-hour window from "
                     f"{window_start.strftime('%Y-%m-%d %H:%M:%S')} to {window_end.strftime('%Y-%m-%d %H:%M:%S')}, "
-                    f"{len(window_trades)} trade(s) with total volume of {total_volume:.2f} lots were executed, "
+                    f"{len(window_trades)} trade(s) with total notional volume of ${total_volume:,.2f} were executed, "
                     f"which exceeds {config.ABUSE_VOLUME_MULTIPLIER}× the account equity "
-                    f"(threshold: {volume_threshold:.2f} lots). Additionally, {trades_without_sl} trade(s) "
+                    f"(threshold: ${volume_threshold:,.2f}). Additionally, {trades_without_sl} trade(s) "
                     f"({no_sl_percent:.1f}%) were opened without Stop-Loss, exceeding the {config.ABUSE_NO_SL_THRESHOLD:.0f}% threshold. "
                     f"Both conditions being met indicates abuse of the simulated trading environment. "
-                    f"[Rule 16: Volume ≥10× equity AND ≥80% trades without SL = Violation]"
+                    f"[Rule 16: Notional Volume ≥10× equity AND ≥80% trades without SL = Violation]"
                 )
                 
                 violations.append({
                     'Window_Start': window_start,
                     'Window_End': window_end,
                     'Trades_In_Window': len(window_trades),
-                    'Total_Volume_Lots': total_volume,
+                    'Total_Notional_Volume': total_volume,
                     'Volume_Threshold': volume_threshold,
                     'Trades_Without_SL': trades_without_sl,
                     'No_SL_Percent': no_sl_percent,
@@ -125,8 +133,8 @@ def print_results(result: dict):
             print(f"\nViolation #{idx}:")
             print(f"  Window: {violation['Window_Start']} to {violation['Window_End']}")
             print(f"  Trades in Window: {violation['Trades_In_Window']}")
-            print(f"  Total Volume: {violation['Total_Volume_Lots']:.2f} lots")
-            print(f"  Volume Threshold (10× equity): {violation['Volume_Threshold']:.2f} lots")
+            print(f"  Total Notional Volume: ${violation['Total_Notional_Volume']:,.2f}")
+            print(f"  Volume Threshold (10× equity): ${violation['Volume_Threshold']:,.2f}")
             print(f"  Trades without SL: {violation['Trades_Without_SL']} ({violation['No_SL_Percent']:.1f}%)")
             print(f"  Required for violation: ≥80% without SL")
             print("  ❌ Both conditions met")

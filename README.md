@@ -329,6 +329,24 @@ This project is proprietary software for trading compliance validation.
 
 ## 🔄 Version History
 
+**Version 1.0.2** (October 2025)
+- 🔧 **Rule 16 Final Compliance Updates**:
+  - **"No SL" detection**: Now treats both `NaN` and `0` as missing Stop Loss (consistent with risk calculations elsewhere)
+  - **Instrument-specific contract sizes**: Notional volume calculation now uses correct contract sizes per instrument
+    - Gold (XAUUSD): 100 oz per lot
+    - Silver (XAGUSD): 5,000 oz per lot
+    - Indices (NAS100, US30, etc.): 1 unit per lot
+    - Forex pairs: 100,000 units per lot (standard)
+    - Oil (USOIL, UKOIL): 1,000 barrels per lot
+  - **Suffix handling**: Correctly strips instrument suffixes (e.g., `XAUUSD.a` → `XAUUSD`)
+  - Rule 16 is now **fully compliant** with project specification
+
+**Version 1.0.1** (October 2025)
+- 🔧 **Rule 16 Fix**: Corrected volume calculation to use notional volume (currency) instead of lots
+  - Now properly compares total traded value ($) against 10× equity ($)
+  - Formula: `notional_volume = lots × contract_size × price`
+  - This aligns with the spec's definition of "volume" as traded value
+
 **Version 1.0.0** (October 2025)
 - ✅ Initial release with full rule validation suite
 - ✅ 11 trading rules implemented and tested

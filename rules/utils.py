@@ -254,6 +254,33 @@ def calculate_margin_required(lots: float, instrument: str, price: float, levera
     return required_margin
 
 
+def calculate_notional_volume(lots: float, instrument: str, price: float) -> float:
+    """
+    Calculate notional volume (traded value in currency)
+    
+    Args:
+        lots: Position size in lots
+        instrument: Trading instrument/symbol (e.g., "XAUUSD", "NAS100", "EURUSD.a")
+        price: Entry price
+        
+    Returns:
+        Notional volume in currency (USD)
+    """
+    # Clean instrument name (remove suffixes like .a, .b, etc.)
+    instrument_base = instrument.split('.')[0].upper()
+    
+    # Get instrument-specific contract size, fallback to standard if not found
+    contract_size = config.CONTRACT_SIZES.get(
+        instrument_base, 
+        config.CONTRACT_SIZES["standard"]
+    )
+    
+    # Calculate notional value: lots × contract_size × price
+    notional_value = abs(lots) * contract_size * price
+    
+    return notional_value
+
+
 def get_distinct_trading_days(df: pd.DataFrame) -> int:
     """
     Count distinct trading days (days with at least one trade)

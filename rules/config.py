@@ -45,11 +45,40 @@ ACCOUNT_SIZES = [5000, 10000, 20000, 25000, 35000, 50000, 100000, 150000, 200000
 # CONTRACT SIZES AND VALUE PER POINT
 # ============================================================================
 
-# Standard lot sizes (units of base currency)
+# Contract sizes by instrument (units per 1 lot)
+# For instruments not listed, "standard" is used as fallback
 CONTRACT_SIZES = {
-    "standard": 100000,
+    # Default sizes
+    "standard": 100000,  # Standard FX lot (100,000 units of base currency)
     "mini": 10000,
-    "micro": 1000
+    "micro": 1000,
+    
+    # Forex pairs - Standard lot = 100,000 units
+    "EURUSD": 100000,
+    "GBPUSD": 100000,
+    "USDJPY": 100000,
+    "USDCHF": 100000,
+    "AUDUSD": 100000,
+    "NZDUSD": 100000,
+    "USDCAD": 100000,
+    "EURGBP": 100000,
+    "EURJPY": 100000,
+    "GBPJPY": 100000,
+    
+    # Precious Metals
+    "XAUUSD": 100,      # Gold - 100 troy ounces per lot
+    "XAGUSD": 5000,     # Silver - 5,000 troy ounces per lot
+    
+    # Indices - typically 1 contract = 1 unit of the index
+    "US30": 1,          # Dow Jones - 1 point per contract
+    "NAS100": 1,        # Nasdaq - 1 point per contract
+    "SPX500": 1,        # S&P 500 - 1 point per contract
+    "GER40": 1,         # DAX - 1 point per contract
+    "UK100": 1,         # FTSE - 1 point per contract
+    
+    # Commodities
+    "USOIL": 1000,      # Crude Oil - 1,000 barrels per lot
+    "UKOIL": 1000,      # Brent Oil - 1,000 barrels per lot
 }
 
 # Value per point/pip for different instruments
