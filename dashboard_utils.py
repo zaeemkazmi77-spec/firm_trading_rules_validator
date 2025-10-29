@@ -208,13 +208,14 @@ def get_account_configuration(account_type: str) -> Dict[str, Any]:
     return config.ACCOUNT_TYPES.get(account_type, {})
 
 
-def determine_active_rules(account_type: str, addon_enabled: bool) -> List[int]:
+def determine_active_rules(account_type: str, news_addon_enabled: bool, weekend_addon_enabled: bool) -> List[int]:
     """
     Determine which rules should be active based on configuration
     
     Args:
         account_type: Selected account type
-        addon_enabled: Whether add-on is enabled
+        news_addon_enabled: Whether News Trading add-on is enabled
+        weekend_addon_enabled: Whether Weekend Holding add-on is enabled
         
     Returns:
         List of active rule numbers
@@ -223,8 +224,12 @@ def determine_active_rules(account_type: str, addon_enabled: bool) -> List[int]:
     active_rules = []
     
     for rule_num in all_rules:
-        # Skip Rules 18 & 19 if add-on is enabled
-        if addon_enabled and rule_num in [18, 19]:
+        # Skip Rule 18 if News Trading add-on is enabled
+        if news_addon_enabled and rule_num == 18:
+            continue
+        
+        # Skip Rule 19 if Weekend Holding add-on is enabled
+        if weekend_addon_enabled and rule_num == 19:
             continue
         
         # Rule 17 only for Direct Funding

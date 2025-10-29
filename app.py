@@ -137,17 +137,32 @@ def create_sidebar():
         
         # Add-on Selection
         st.subheader("3️⃣ Add-ons")
-        addon_allowed = config.ACCOUNT_TYPES[account_type]['addon_allowed']
+        config_data = config.ACCOUNT_TYPES[account_type]
+        news_addon_allowed = config_data['news_addon_allowed']
+        weekend_addon_allowed = config_data['weekend_addon_allowed']
         
-        if addon_allowed:
-            addon_enabled = st.checkbox(
-                "Enable News Trading & Weekend Holding Add-on",
-                key='addon_enabled',
-                help="When enabled, Rules 18 (News Trading) and 19 (Weekend Holding) are skipped"
-            )
+        if news_addon_allowed or weekend_addon_allowed:
+            if news_addon_allowed:
+                news_addon_enabled = st.checkbox(
+                    "Enable News Trading Add-on",
+                    key='news_addon_enabled',
+                    help="When enabled, Rule 18 (News Trading Restriction) is skipped"
+                )
+            else:
+                st.session_state.news_addon_enabled = False
+            
+            if weekend_addon_allowed:
+                weekend_addon_enabled = st.checkbox(
+                    "Enable Weekend Holding Add-on",
+                    key='weekend_addon_enabled',
+                    help="When enabled, Rule 19 (Weekend Trading and Holding) is skipped"
+                )
+            else:
+                st.session_state.weekend_addon_enabled = False
         else:
-            st.info("ℹ️ Add-on not available for this account type")
-            st.session_state.addon_enabled = False
+            st.info("ℹ️ Add-ons not available for this account type")
+            st.session_state.news_addon_enabled = False
+            st.session_state.weekend_addon_enabled = False
         
         st.divider()
         
@@ -185,9 +200,9 @@ def create_sidebar():
             - At least 95% of rows must be valid
             
             **Account Types:**
-            - **2-Step Phase 1/2**: 1:100 leverage, no add-on
-            - **Funded Phase**: 1:50 leverage, add-on optional
-            - **Direct Funding**: 1:30 leverage, add-on optional
+            - **2-Step Phase 1/2**: 1:100 leverage, add-ons available
+            - **Funded Phase**: 1:50 leverage, add-ons available
+            - **Direct Funding**: 1:30 leverage, add-ons available
             
             **Rules Tested:**
             - Rule 1: Hedging Ban
@@ -208,7 +223,8 @@ def show_configuration_info():
     """Display current configuration"""
     account_type = st.session_state.get('account_type')
     account_size = st.session_state.get('account_size')
-    addon_enabled = st.session_state.get('addon_enabled', False)
+    news_addon_enabled = st.session_state.get('news_addon_enabled', False)
+    weekend_addon_enabled = st.session_state.get('weekend_addon_enabled', False)
     
     if account_type and account_size:
         config_data = config.ACCOUNT_TYPES[account_type]
@@ -223,7 +239,9 @@ def show_configuration_info():
             with col3:
                 st.metric("Leverage", f"1:{config_data['leverage']}")
             with col4:
-                st.metric("Add-on Status", "Enabled" if addon_enabled else "Disabled")
+                news_status = "✅" if news_addon_enabled else "❌"
+                weekend_status = "✅" if weekend_addon_enabled else "❌"
+                st.metric("Add-ons", f"News: {news_status} | Weekend: {weekend_status}")
             
             st.info(f"ℹ️ Minimum Trading Days Required: {config_data['min_trading_days']}")
             
@@ -233,8 +251,10 @@ def show_configuration_info():
             all_rules = [1, 3, 4, 12, 13, 14, 15, 16, 17, 18, 19, 23]
             
             for rule_num in all_rules:
-                if addon_enabled and rule_num in [18, 19]:
-                    rules_status.append(f"Rule {rule_num}: ⏭️ Skipped (Add-on enabled)")
+                if news_addon_enabled and rule_num == 18:
+                    rules_status.append(f"Rule {rule_num}: ⏭️ Skipped (News Trading Add-on enabled)")
+                elif weekend_addon_enabled and rule_num == 19:
+                    rules_status.append(f"Rule {rule_num}: ⏭️ Skipped (Weekend Holding Add-on enabled)")
                 elif rule_num == 17 and account_type != "Direct Funding":
                     rules_status.append(f"Rule {rule_num}: ⏭️ Skipped (Direct Funding only)")
                 else:
@@ -339,10 +359,11 @@ def run_validation():
         # Get configuration
         account_type = st.session_state.get('account_type')
         account_size = st.session_state.get('account_size')
-        addon_enabled = st.session_state.get('addon_enabled', False)
+        news_addon_enabled = st.session_state.get('news_addon_enabled', False)
+        weekend_addon_enabled = st.session_state.get('weekend_addon_enabled', False)
         
         # Determine active rules
-        active_rules = utils.determine_active_rules(account_type, addon_enabled)
+        active_rules = utils.determine_active_rules(account_type, news_addon_enabled, weekend_addon_enabled)
         
         # Execute rules
         with st.spinner("🔍 Running rule validation..."):
@@ -350,7 +371,8 @@ def run_validation():
                 phases,
                 account_type,
                 account_size,
-                addon_enabled,
+                news_addon_enabled,
+                weekend_addon_enabled,
                 active_rules
             )
         

@@ -20,7 +20,8 @@ def execute_all_rules(
     phases: Dict[str, pd.DataFrame],
     account_type: str,
     account_size: float,
-    addon_enabled: bool,
+    news_addon_enabled: bool,
+    weekend_addon_enabled: bool,
     active_rules: List[int]
 ) -> List[Dict[str, Any]]:
     """
@@ -30,7 +31,8 @@ def execute_all_rules(
         phases: Dictionary mapping phase names to DataFrames
         account_type: Selected account type
         account_size: Account equity
-        addon_enabled: Whether add-on is enabled
+        news_addon_enabled: Whether News Trading add-on is enabled
+        weekend_addon_enabled: Whether Weekend Holding add-on is enabled
         active_rules: List of rule numbers to execute
         
     Returns:
@@ -73,9 +75,9 @@ def execute_all_rules(
             elif rule_num == 17:
                 result = execute_rule_17(main_df, account_size, account_type)
             elif rule_num == 18:
-                result = execute_rule_18(main_df, addon_enabled)
+                result = execute_rule_18(main_df, news_addon_enabled)
             elif rule_num == 19:
-                result = execute_rule_19(main_df, addon_enabled, account_size)
+                result = execute_rule_19(main_df, weekend_addon_enabled, account_size)
             elif rule_num == 23:
                 result = execute_rule_23(main_df, account_type)
             else:

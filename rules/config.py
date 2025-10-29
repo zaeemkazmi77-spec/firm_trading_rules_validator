@@ -11,25 +11,29 @@ ACCOUNT_TYPES = {
     "2-Step Phase 1": {
         "leverage": 100,
         "contract_size": "standard",
-        "addon_allowed": False,
+        "news_addon_allowed": True,
+        "weekend_addon_allowed": True,
         "min_trading_days": 0
     },
     "2-Step Phase 2": {
         "leverage": 100,
         "contract_size": "standard",
-        "addon_allowed": False,
+        "news_addon_allowed": True,
+        "weekend_addon_allowed": True,
         "min_trading_days": 0
     },
     "Funded Phase": {
         "leverage": 50,
         "contract_size": "standard",
-        "addon_allowed": True,
+        "news_addon_allowed": True,
+        "weekend_addon_allowed": True,
         "min_trading_days": 4
     },
     "Direct Funding": {
         "leverage": 30,
         "contract_size": "standard",
-        "addon_allowed": True,
+        "news_addon_allowed": True,
+        "weekend_addon_allowed": True,
         "min_trading_days": 7
     }
 }
